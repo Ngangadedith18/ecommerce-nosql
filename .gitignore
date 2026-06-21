@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# Node
+ecommerce-front/node_modules/
+ecommerce-front/build/
+
+# Data (fichier trop lourd pour GitHub)
+ecommerce-back/data/
+
+# Logs
+ecommerce-back/scripts/logs/
+
+# Docker
+docker/mongo-keyfile

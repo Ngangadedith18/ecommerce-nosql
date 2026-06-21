@@ -1,0 +1,28 @@
+2026-06-21 15:18:43,395 [INFO] ══════════ DÉMARRAGE DU PIPELINE ══════════
+2026-06-21 15:18:43,396 [INFO] Lecture du CSV brut…
+2026-06-21 15:18:43,792 [INFO]   101,500 lignes lues
+2026-06-21 15:18:43,931 [INFO]   Doublons supprimés : 1,500
+2026-06-21 15:18:57,361 [INFO] ─── Bilan nettoyage ───────────────────────────
+2026-06-21 15:18:57,362 [INFO]   total_raw           : 101,500
+2026-06-21 15:18:57,363 [INFO]   duplicates          : 1,500
+2026-06-21 15:18:57,363 [INFO]   bad_date            : 1,013
+2026-06-21 15:18:57,364 [INFO]   bad_price           : 1,009
+2026-06-21 15:18:57,365 [INFO]   bad_quantity        : 2,027
+2026-06-21 15:18:57,365 [INFO]   anonymous           : 2,020
+2026-06-21 15:18:57,366 [INFO]   clean               : 95,951
+2026-06-21 15:18:57,366 [INFO]   Journal rejet        : /app/logs/rejected_rows.json
+2026-06-21 15:18:57,367 [INFO] ───────────────────────────────────────────────
+2026-06-21 15:18:57,399 [INFO] MongoDB connecté — Replica Set : 0
+2026-06-21 15:19:14,049 [INFO] MongoDB — transactions insérées : 95,951  erreurs : 0
+2026-06-21 15:19:15,095 [INFO] MongoDB — produits du catalogue : 392
+2026-06-21 15:19:15,104 [INFO] Neo4j connecté
+2026-06-21 15:19:20,481 [INFO] Neo4j — contraintes et index créés
+2026-06-21 15:19:23,839 [INFO] Neo4j — clients injectés : 1,976
+2026-06-21 15:19:24,732 [INFO] Neo4j — produits injectés : 392
+2026-06-21 15:19:51,907 [INFO] Neo4j — relations PURCHASED injectées : 93,931
+2026-06-21 15:19:51,970 [INFO] Redis connecté
+2026-06-21 15:19:52,038 [INFO] Redis — sessions créées : 500 (TTL 3600s)
+2026-06-21 15:19:52,088 [INFO] Redis — top_sales peuplé avec 392 produits
+2026-06-21 15:19:52,104 [INFO] Redis — compteurs catégories : {'Autre': 52061, 'Beauté': 30241, 'Livres': 28926, 'Maison': 21502, 'Mode': 25714, 'Sport': 27579, 'Électronique': 22949}
+2026-06-21 15:19:52,104 [INFO] ══════════ PIPELINE TERMINÉ ══════════
+2026-06-21 15:19:52,105 [INFO] Log complet : /app/logs/pipeline_20260621_151843.log

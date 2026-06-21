@@ -1,0 +1,121 @@
+version: "3.8"
+
+networks:
+  nosql-net:
+    driver: bridge
+
+volumes:
+  mongo1-data:
+  mongo2-data:
+  mongo3-data:
+  neo4j-data:
+  redis-data:
+
+services:
+
+  mongo1:
+    image: mongo:7.0
+    container_name: mongo1
+    hostname: mongo1
+    networks: [nosql-net]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo1-data:/data/db
+    command: mongod --replSet rs0 --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mongo2:
+    image: mongo:7.0
+    container_name: mongo2
+    hostname: mongo2
+    networks: [nosql-net]
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo2-data:/data/db
+    command: mongod --replSet rs0 --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      mongo1:
+        condition: service_healthy
+
+  mongo3:
+    image: mongo:7.0
+    container_name: mongo3
+    hostname: mongo3
+    networks: [nosql-net]
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo3-data:/data/db
+    command: mongod --replSet rs0 --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      mongo1:
+        condition: service_healthy
+
+  mongo-init:
+    image: mongo:7.0
+    container_name: mongo-init
+    networks: [nosql-net]
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    volumes:
+      - ./init-replicaset.sh:/init-replicaset.sh:ro
+    entrypoint: ["/bin/bash", "/init-replicaset.sh"]
+    restart: "no"
+
+  neo4j:
+    image: neo4j:5.18-community
+    container_name: neo4j
+    networks: [nosql-net]
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/data
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    networks: [nosql-net]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
