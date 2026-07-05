@@ -18,8 +18,14 @@ Rate Limiting via Redis (sliding window) : 60 req / minute / IP
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+import asyncio
+import tempfile
 import time
 import json
+import concurrent.futures
+import threading
 from typing import Optional
 from contextlib import asynccontextmanager
 
@@ -34,6 +40,9 @@ from neo4j import GraphDatabase, AsyncGraphDatabase
 import redis.asyncio as aioredis
 
 from datetime import datetime
+from fastapi.responses import StreamingResponse
+from fastapi import UploadFile, File
+
 
 # ─────────────────────────────────────────
 # CONFIGURATION (variables d'environnement)
@@ -525,11 +534,101 @@ async def search_catalogue(
         }
     }
 
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# Lance le pipeline de nettoyage et d'injection d'un CSV uploadé (script Python externe)
+# ─────────────────────────────────────────────────────────────────────────────────────────
+@app.post("/pipeline/upload")
+async def upload_and_run(file: UploadFile = File(...)):
+    if _pipeline_status[0]["running"]:
+        return {"status": "already_running"}
+
+    content = await file.read()
+    tmp_path = f"C:/ecommerce-nosql/ecommerce-back/data/uploaded_{file.filename}"
+    with open(tmp_path, "wb") as f:
+        f.write(content)
+
+    _pipeline_status[0] = {"running": True, "result": None}
+
+    def run_in_thread():
+        try:
+            result = subprocess.run(
+                [r"C:\Python313\python.exe",
+                 r"C:\ecommerce-nosql\ecommerce-back\scripts\clean_and_inject.py",
+                 "--csv", tmp_path],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                cwd=r"C:\ecommerce-nosql\ecommerce-back\scripts"
+            )
+            _pipeline_status[0] = {
+                "running": False,
+                "result": {
+                    "status": "success",
+                    "returncode": result.returncode,
+                    "stdout": result.stdout[-3000:],
+                    "stderr": result.stderr[-1000:],
+                }
+            }
+        except Exception as e:
+            _pipeline_status[0] = {
+                "running": False,
+                "result": {"status": "error", "message": str(e), "stdout": "", "stderr": str(e)}
+            }
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    return {"status": "started", "message": "Pipeline lancé en arrière-plan avec le fichier uploadé."}
+
+
+# ─────────────────────────────────────────────────────
+# Lance le pipeline de nettoyage et d'injection
+# ─────────────────────────────────────────────────────
+_pipeline_status = [{"running": False, "result": None}]
+
+@app.post("/pipeline/run")
+async def run_pipeline():
+    if _pipeline_status[0]["running"]:
+        return {"status": "already_running"}
+    
+    _pipeline_status[0] = {"running": True, "result": None}
+
+    def run_in_thread():
+        try:
+            result = subprocess.run(
+                [r"C:\Python313\python.exe",
+                 r"C:\ecommerce-nosql\ecommerce-back\scripts\clean_and_inject.py"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                cwd=r"C:\ecommerce-nosql\ecommerce-back\scripts"
+            )
+            _pipeline_status[0] = {
+                "running": False,
+                "result": {
+                    "status": "success",
+                    "returncode": result.returncode,
+                    "stdout": result.stdout[-3000:],
+                    "stderr": result.stderr[-1000:],
+                }
+            }
+        except Exception as e:
+            _pipeline_status[0] = {
+                "running": False,
+                "result": {"status": "error", "message": str(e), "stdout": "", "stderr": str(e)}
+            }
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    return {"status": "started", "message": "Pipeline lancé en arrière-plan."}
+
+@app.get("/pipeline/status")
+async def pipeline_status():
+    return _pipeline_status[0]
+
 
 # ─────────────────────────────────────────
 # HEALTH CHECK
 # ─────────────────────────────────────────
-
 @app.get("/health")
 async def health():
     """Vérifie la connectivité des trois bases."""
@@ -567,3 +666,49 @@ async def health():
 
     overall = "ok" if all(v["status"] == "ok" for v in checks.values()) else "degraded"
     return {"overall": overall, **checks}
+
+# ─────────────────────────────────────────
+# Haute disponibilité MongoDB (Replica Set)
+# ─────────────────────────────────────────
+@app.get("/mongodb/replicaset")
+async def replicaset_status():
+    from pymongo import MongoClient
+    members = []
+    nodes = [("mongo1", 27017), ("mongo2", 27018), ("mongo3", 27019)]
+    for name, port in nodes:
+        try:
+            c = MongoClient(
+                f"mongodb://localhost:{port}/?directConnection=true",
+                serverSelectionTimeoutMS=2000
+            )
+            info = c.admin.command("isMaster")
+            state = "PRIMARY" if info.get("ismaster") else "SECONDARY"
+            members.append({"name": f"{name}:{port}", "state": state, "health": 1, "uptime": 0})
+            c.close()
+        except:
+            members.append({"name": f"{name}:{port}", "state": "DOWN", "health": 0, "uptime": 0})
+    primary = next((m["name"] for m in members if m["state"] == "PRIMARY"), None)
+    return {"replicaSet": "rs0", "members": members, "primary": primary}
+
+# ─────────────────────────────────────────
+# Haute disponibilité MongoDB (Replica Set)
+# ─────────────────────────────────────────
+@app.post("/mongodb/failover/{action}/{node}")
+async def mongodb_failover(action: str, node: str):
+    if action not in ["stop", "start"]:
+        raise HTTPException(status_code=400, detail="Action invalide")
+    if node not in ["mongo1", "mongo2", "mongo3"]:
+        raise HTTPException(status_code=400, detail="Nœud invalide")
+    try:
+        result = subprocess.run(
+            ["docker", action, node],
+            capture_output=True, text=True, timeout=15
+        )
+        return {
+            "action": action,
+            "node": node,
+            "success": result.returncode == 0,
+            "message": result.stdout or result.stderr
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

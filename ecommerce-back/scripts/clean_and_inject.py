@@ -192,6 +192,14 @@ class DataCleaner:
                 r["quantity"]     = qty_ok
                 r["total_amount"] = round(price_ok * qty_ok, 2)
 
+                r["quantity"]     = qty_ok
+                r["total_amount"] = round(price_ok * qty_ok, 2)
+
+                # Normalisation des catégories
+                cat = r.get("product_category", "").strip()
+                cat = cat.replace("Electronique", "Électronique").replace("Beaute", "Beauté")
+                r["product_category"] = cat
+
                 clean_rows.append(r)
 
             except Exception as e:
@@ -592,4 +600,9 @@ def main():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", default=CSV_PATH, help="Chemin du fichier CSV")
+    args = parser.parse_args()
+    CSV_PATH = args.csv
     main()
