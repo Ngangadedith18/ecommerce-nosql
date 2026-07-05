@@ -1,0 +1,88 @@
+name: CI/CD — Pipeline NoSQL E-Commerce
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  # ══════════════════════════════════════════════
+  # JOB 1 — Lint du code Python
+  # ══════════════════════════════════════════════
+  lint:
+    name: Lint (flake8 + pylint)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installation des dépendances lint
+        run: |
+          pip install flake8 pylint pandas pymongo neo4j redis
+
+      - name: Flake8 — vérification du style
+        run: |
+          flake8 ecommerce-back/scripts/ ecommerce-back/api/ \
+            --max-line-length=120 \
+            --ignore=E501,W503,E203 \
+            --exclude=__pycache__
+
+      - name: Pylint — analyse statique
+        run: |
+          pylint ecommerce-back/scripts/clean_and_inject.py \
+            ecommerce-back/scripts/schema_and_sync.py \
+            ecommerce-back/api/main.py \
+            --disable=C0114,C0115,C0116,R0903,W0611 \
+            --max-line-length=120 \
+            --fail-under=7.0
+
+  # ══════════════════════════════════════════════
+  # JOB 2 — Tests unitaires DataCleaner
+  # ══════════════════════════════════════════════
+  test:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installation des dépendances
+        run: |
+          pip install pytest pandas pymongo neo4j redis
+
+      - name: Lancement des tests
+        run: |
+          pytest ecommerce-back/scripts/tests/ -v --tb=short
+
+  # ══════════════════════════════════════════════
+  # JOB 3 — Build Docker (vérification du compose)
+  # ══════════════════════════════════════════════
+  docker-build:
+    name: Vérification Docker Compose
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Validation du docker-compose.yml
+        run: |
+          cd docker
+          docker compose config --quiet
+          echo "✅ docker-compose.yml valide"
